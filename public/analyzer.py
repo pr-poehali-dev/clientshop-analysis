@@ -51,7 +51,9 @@ def section_header(title):
 # --- Сбор файлов -------------------------------------------------------------
 
 SKIP_DIRS = {"tests", "test", "__pycache__", ".venv", "venv", "env", ".git",
-             "node_modules", ".idea", ".vs", "bin", "obj", "dist", "build", ".svn"}
+             "node_modules", ".idea", ".vs", "bin", "obj", "dist", "build", ".svn",
+             "UpdBackups", "updbackups", "Backup", "backup", "backups", "Backups",
+             "Archive", "archive", "Old", "old"}
 
 KNOWN_LANGS = {
     ".py":   "Python",
@@ -665,39 +667,101 @@ def print_universal_keywords(all_files):
 
 
 def print_universal_deps(root, all_files):
-    """Анализ зависимостей — include/import/require во всех файлах."""
+    """Анализ зависимостей — таблицы SQL, модули TS/JS, библиотеки PHP/C#."""
     section_header("Зависимости и подключения")
 
-    IMPORT_PATTERNS = [
-        r'import\s+[\w,\s{}*]+\s+from\s+["\'](.+?)["\']',   # JS/TS
-        r'require\s*\(\s*["\'](.+?)["\']\s*\)',               # JS/PHP
-        r'import\s+([\w.]+)',                                  # Python/Java
-        r'use\s+([\w\\]+)',                                    # PHP
-        r'#include\s+[<"](.+?)[>"]',                          # C/C++
-        r'using\s+([\w.]+)',                                   # C#
-    ]
+    # Стоп-слова — мусор из комментариев и ключевые слова языков
+    STOPWORDS = {
+        "as", "the", "this", "from", "that", "with", "for", "and", "not",
+        "new", "null", "true", "false", "native", "srand", "void", "int",
+        "char", "return", "class", "public", "private", "static", "using",
+        "select", "where", "inner", "outer", "left", "right", "join", "on",
+        "by", "or", "in", "is", "of", "to", "be", "at", "an", "do", "if",
+        "set", "all", "any", "end", "var", "let", "const", "type", "enum",
+    }
 
-    counter = defaultdict(int)
+    # JS/TS: import X from '...'  или  import '...'
+    ts_modules   = defaultdict(int)
+    # SQL: FROM table, JOIN table, INTO table
+    sql_tables   = defaultdict(int)
+    # PHP/C#: use / require / #include
+    other_deps   = defaultdict(int)
+
+    pat_ts_from  = re.compile(r"""from\s+['"]([^'"]+)['"]""", re.IGNORECASE)
+    pat_ts_req   = re.compile(r"""require\s*\(\s*['"]([^'"]+)['"]\s*\)""", re.IGNORECASE)
+    pat_sql_tbl  = re.compile(r"""(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+([a-zA-Z_]\w*)""", re.IGNORECASE)
+    pat_php_use  = re.compile(r"""(?:use|require_once|require|include_once|include)\s+['"]?([A-Za-z_][\w/\\]*)""", re.IGNORECASE)
+    pat_cs_using = re.compile(r"""using\s+([A-Za-z_][\w.]*)""")
+    pat_include  = re.compile(r"""#include\s+[<"]([^>"]+)[>"]""")
+
     for fpath in all_files:
         try:
             text = fpath.read_text(encoding="utf-8", errors="ignore")
-            for pattern in IMPORT_PATTERNS:
-                for match in re.finditer(pattern, text, re.IGNORECASE):
-                    dep = match.group(1).strip().split("/")[0].split("\\")[0]
-                    if dep and not dep.startswith("."):
-                        counter[dep] += 1
+            ext  = fpath.suffix.lower()
+
+            if ext in (".ts", ".js"):
+                for m in pat_ts_from.finditer(text):
+                    mod = m.group(1).split("/")[0].lstrip("@")
+                    if mod and not mod.startswith(".") and mod not in STOPWORDS:
+                        ts_modules[mod] += 1
+                for m in pat_ts_req.finditer(text):
+                    mod = m.group(1).split("/")[0]
+                    if mod and not mod.startswith(".") and mod not in STOPWORDS:
+                        ts_modules[mod] += 1
+
+            elif ext == ".sql":
+                for m in pat_sql_tbl.finditer(text):
+                    tbl = m.group(1).lower()
+                    if len(tbl) > 2 and tbl not in STOPWORDS:
+                        sql_tables[tbl] += 1
+
+            elif ext == ".php":
+                for m in pat_php_use.finditer(text):
+                    dep = m.group(1).split("/")[0].split("\\")[0]
+                    if dep and dep not in STOPWORDS:
+                        other_deps[dep] += 1
+
+            elif ext in (".cs",):
+                for m in pat_cs_using.finditer(text):
+                    dep = m.group(1).split(".")[0]
+                    if dep and dep not in STOPWORDS:
+                        other_deps[dep] += 1
+
+            elif ext in (".c", ".cpp", ".h"):
+                for m in pat_include.finditer(text):
+                    other_deps[m.group(1)] += 1
+
         except Exception:
             pass
 
-    if not counter:
-        print(f"  {dim('Зависимостей не найдено.')}")
-        return
+    found_any = False
 
-    print(f"  {'Зависимость':<30} {'Упоминаний':>10}  График")
-    print(f"  {'-'*30} {'-'*10}  {'-'*25}")
-    for dep, cnt in sorted(counter.items(), key=lambda x: -x[1])[:30]:
-        bar = g("#" * min(cnt, 25))
-        print(f"  {c(dep):<30} {str(cnt):>10}  {bar}")
+    if ts_modules:
+        found_any = True
+        print(f"\n  {a('Модули TypeScript / JavaScript')} ({len(ts_modules)}):")
+        print(f"  {'Модуль':<30} {'Упоминаний':>10}  График")
+        print(f"  {'-'*30} {'-'*10}  {'-'*25}")
+        for dep, cnt in sorted(ts_modules.items(), key=lambda x: -x[1])[:25]:
+            bar = g("#" * min(cnt, 25))
+            print(f"  {c(dep):<30} {str(cnt):>10}  {bar}")
+
+    if sql_tables:
+        found_any = True
+        print(f"\n  {a('Таблицы базы данных (SQL)')} ({len(sql_tables)}):")
+        print(f"  {'Таблица':<35} {'Упоминаний':>10}  График")
+        print(f"  {'-'*35} {'-'*10}  {'-'*20}")
+        for tbl, cnt in sorted(sql_tables.items(), key=lambda x: -x[1])[:30]:
+            bar = g("#" * min(cnt, 20))
+            print(f"  {c(tbl):<35} {str(cnt):>10}  {bar}")
+
+    if other_deps:
+        found_any = True
+        print(f"\n  {a('Прочие зависимости')} ({len(other_deps)}):")
+        for dep, cnt in sorted(other_deps.items(), key=lambda x: -x[1])[:20]:
+            print(f"  {c(dep):<30} {dim(str(cnt) + ' упом.')}")
+
+    if not found_any:
+        print(f"  {dim('Зависимостей не найдено.')}")
 
 
 def analyze_folder(root, active_sections, out_file=None):
