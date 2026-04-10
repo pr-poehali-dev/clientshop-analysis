@@ -899,6 +899,134 @@ def analyze_folder(root, active_sections, out_file=None):
         export_report(folder_out, captured)
 
 
+def print_summary(all_folders_data):
+    """Сводка по всем папкам — таблицы БД, бизнес-процессы, статистика."""
+    print(f"\n{'=' * 70}")
+    print(f"  {bold(g('СВОДКА ПО ВСЕМ ПАПКАМ'))}")
+    print(f"{'=' * 70}")
+
+    total_files = sum(d["file_count"] for d in all_folders_data)
+    total_lines = sum(d["total_lines"] for d in all_folders_data)
+
+    # --- Общая статистика ---
+    print(f"\n  {a('Общая статистика:')}")
+    print(f"  {'Папка':<30} {'Файлов':>7}  {'Строк':>8}  Языки")
+    print(f"  {'-'*30} {'-'*7}  {'-'*8}  {'-'*25}")
+    for d in all_folders_data:
+        langs = ", ".join(d["langs"][:4])
+        fc = str(d["file_count"]) if d["file_count"] else dim("нет кода")
+        print(f"  {c(d['name']):<39} {fc:>7}  {dim(str(d['total_lines'])):>8}  {dim(langs)}")
+    print(f"  {dim('-'*70)}")
+    print(f"  {'ИТОГО':<30} {g(str(total_files)):>7}  {g(str(total_lines)):>8}")
+
+    # --- Все таблицы БД ---
+    all_tables = defaultdict(int)
+    for d in all_folders_data:
+        for tbl, cnt in d["sql_tables"].items():
+            all_tables[tbl] += cnt
+
+    if all_tables:
+        print(f"\n  {a('Таблицы базы данных — все папки')} ({len(all_tables)}):")
+        print(f"  {'Таблица':<35} {'Упоминаний':>10}  График")
+        print(f"  {'-'*35} {'-'*10}  {'-'*20}")
+        for tbl, cnt in sorted(all_tables.items(), key=lambda x: -x[1])[:35]:
+            bar = g("#" * min(cnt, 20))
+            print(f"  {c(tbl):<35} {str(cnt):>10}  {bar}")
+
+    # --- Все бизнес-процессы ---
+    all_biz = defaultdict(list)
+    for d in all_folders_data:
+        for category, hits in d["biz_keywords"].items():
+            for h in hits:
+                entry = f"[{d['name']}]  {h}"
+                if entry not in all_biz[category]:
+                    all_biz[category].append(entry)
+
+    if all_biz:
+        print(f"\n  {a('Бизнес-логика — сводка по всем папкам:')}")
+        for category, hits in all_biz.items():
+            print(f"\n  {c('>')} {bold(category)}")
+            for h in hits[:4]:
+                print(f"    {dim('-')}  {g(h)}")
+
+    print(f"\n{'=' * 70}\n")
+
+
+def collect_folder_data(root):
+    """Собирает данные папки для сводки без вывода."""
+    all_files = collect_all_files(root)
+    if not all_files:
+        return {"name": root.name, "file_count": 0, "total_lines": 0,
+                "langs": [], "sql_tables": {}, "biz_keywords": {}}
+
+    # Языки
+    by_ext = defaultdict(int)
+    total_lines = 0
+    for f in all_files:
+        by_ext[f.suffix.lower()] += 1
+        total_lines += count_lines(f)["total"]
+    langs = [KNOWN_LANGS.get(e, e) for e, _ in sorted(by_ext.items(), key=lambda x: -x[1])]
+
+    # Таблицы SQL
+    pat_sql = re.compile(r"""(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+([a-zA-Z_]\w*)""", re.IGNORECASE)
+    STOPWORDS = {"as","the","this","from","that","with","for","and","not","new","null",
+                 "true","false","native","void","int","char","return","class","public",
+                 "select","where","inner","outer","left","right","join","on","by","or",
+                 "in","is","of","to","be","at","an","do","if","set","all","end","var"}
+    sql_tables = defaultdict(int)
+    for fpath in all_files:
+        if fpath.suffix.lower() in (".ts", ".js", ".sql", ".json", ".xml", ".ps1"):
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="ignore")
+                for m in pat_sql.finditer(text):
+                    tbl = m.group(1).lower()
+                    if len(tbl) > 3 and tbl not in STOPWORDS and not tbl.isdigit():
+                        sql_tables[tbl] += 1
+            except Exception:
+                pass
+
+    # Бизнес-ключевые слова
+    CODE_EXTS = {".ts", ".js", ".py", ".php", ".cs", ".json", ".xml", ".ps1"}
+    BUSINESS = {
+        "Авторизация":    ["login", "auth", "password", "token", "session"],
+        "Заказы/Продажи": ["simplesale", "sale", "order", "doc_sale"],
+        "Оплата/Долги":   ["payment", "pay", "buyerdebt", "doc_pays", "invoice"],
+        "Товары/Каталог": ["goods", "dir_goods", "product", "catalog", "price_"],
+        "Отчёты":         ["setname", "addcolumn", "createreport", "report"],
+        "Инвентаризация": ["invsession", "inventory", "doc_invsession"],
+    }
+    SKIP = ["license", "copyright", "<span", "<font", "<meta", "fbudf_api",
+            "contents of this file", "you may not use"]
+    biz_keywords = defaultdict(list)
+    for fpath in all_files:
+        if fpath.suffix.lower() not in CODE_EXTS:
+            continue
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="ignore").splitlines()
+            for i, line in enumerate(lines, 1):
+                ll = line.lower().strip()
+                if not ll or len(ll) < 5 or any(s in ll for s in SKIP):
+                    continue
+                for cat, kws in BUSINESS.items():
+                    for kw in kws:
+                        if kw in ll:
+                            entry = f"{fpath.name}:{i}  {line.strip()[:60]}"
+                            if entry not in biz_keywords[cat]:
+                                biz_keywords[cat].append(entry)
+                            break
+        except Exception:
+            pass
+
+    return {
+        "name": root.name,
+        "file_count": len(all_files),
+        "total_lines": total_lines,
+        "langs": langs,
+        "sql_tables": dict(sql_tables),
+        "biz_keywords": dict(biz_keywords),
+    }
+
+
 def main():
     # Если путь передан аргументом — старый режим (для опытных)
     if len(sys.argv) > 1:
@@ -919,8 +1047,25 @@ def main():
     # Интерактивная форма
     folders, active_sections, out_file = interactive_form()
 
+    # Анализ каждой папки
+    all_folders_data = []
     for folder in folders:
         analyze_folder(folder, active_sections, out_file)
+        all_folders_data.append(collect_folder_data(folder))
+
+    # Сводка по всем папкам
+    if len(folders) > 1:
+        print_summary(all_folders_data)
+        if out_file:
+            base = out_file if out_file.endswith(".txt") else out_file + ".txt"
+            summary_path = base.replace(".txt", "_SUMMARY.txt")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                print_summary(all_folders_data)
+            ansi_escape = re.compile(r"\033\[[0-9;]*m")
+            with open(summary_path, "w", encoding="utf-8") as f:
+                f.write(ansi_escape.sub("", buf.getvalue()))
+            print(f"  {g('OK')} Сводка сохранена: {c(summary_path)}")
 
     print(f"\n  {g('Анализ завершён.')} Обработано папок: {g(str(len(folders)))}")
     input("  Нажмите Enter для выхода...")
