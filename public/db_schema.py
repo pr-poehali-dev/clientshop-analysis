@@ -3,7 +3,7 @@
 PyScope DB Schema Extractor
 Подключается к базе Firebird и выгружает полную схему таблиц.
 Использование: python db_schema.py
-               python db_schema.py --out C:\1\schema.txt
+               python db_schema.py --out C:\\1\\schema.txt
 """
 
 import sys
@@ -96,14 +96,14 @@ SQL_TABLES = """
 SQL_COLUMNS = """
     SELECT
         TRIM(rf.RDB$FIELD_NAME)          AS col_name,
-        TRIM(f.RDB$FIELD_TYPE)           AS field_type,
+        f.RDB$FIELD_TYPE                 AS field_type,
         f.RDB$FIELD_LENGTH               AS field_length,
         f.RDB$FIELD_PRECISION            AS field_precision,
         f.RDB$FIELD_SCALE                AS field_scale,
         rf.RDB$NULL_FLAG                 AS not_null,
         TRIM(rf.RDB$DEFAULT_SOURCE)      AS default_val,
-        TRIM(rf.RDB$DESCRIPTION)         AS description,
-        rf.RDB$FIELD_POSITION            AS position
+        TRIM(rf.RDB$DESCRIPTION)         AS descr,
+        rf.RDB$FIELD_POSITION            AS fld_pos
     FROM RDB$RELATION_FIELDS rf
     JOIN RDB$FIELDS f ON f.RDB$FIELD_NAME = rf.RDB$FIELD_SOURCE
     WHERE TRIM(rf.RDB$RELATION_NAME) = ?
