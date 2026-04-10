@@ -278,7 +278,8 @@ def print_classes(all_classes):
         print(f"    {dim('Методов:   ')}{a(len(cls['methods']))}  {dim('|  Атрибутов: ')}{p(len(cls['properties']))}")
         if cls["methods"]:
             preview = ", ".join(f"{m}()" for m in cls["methods"][:6])
-            suffix = f"  {dim(f'+ ещё {len(cls[\"methods\"])-6}')}" if len(cls["methods"]) > 6 else ""
+            extra = len(cls["methods"]) - 6
+            suffix = f"  {dim(f'+ ещё {extra}')}" if extra > 0 else ""
             print(f"    {dim('Методы:    ')}{g(preview)}{suffix}")
 
 def print_functions(all_funcs):
