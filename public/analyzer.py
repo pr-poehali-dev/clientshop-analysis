@@ -459,13 +459,37 @@ SECTION_NAMES = {
 }
 
 
-def ask_folder(label, index):
-    """Запрашивает путь к папке у пользователя."""
+# --- Сохранённые папки (заполняются автоматически после первого запуска) ------
+
+DEFAULT_FOLDERS = [
+    r"C:\ClientShop2site",
+    r"C:\ClientShop2x",
+    r"C:\ClientShopDatabase",
+    r"C:\ClientShopDocuments",
+]
+
+DEFAULT_OUT = r"C:\1\report"
+
+
+def ask_folder(label, index, default=None):
+    """Запрашивает путь к папке. Enter = использовать сохранённый."""
     while True:
         print(f"\n  {a(label)}")
-        print(f"  {dim('Пример: C:\\Users\\Имя\\МойПроект  или  оставьте пустым чтобы пропустить')}")
+        if default:
+            print(f"  {dim('Сохранено: ')}{c(default)}  {dim('(Enter чтобы использовать)')}")
+        else:
+            print(f"  {dim('Пример: C:\\Users\\Имя\\МойПроект  или  оставьте пустым чтобы пропустить')}")
         raw = input(f"  {g('> ')}").strip().strip('"').strip("'")
-        if raw == "":
+        if raw == "" and default:
+            path = Path(default).resolve()
+            if path.exists() and path.is_dir():
+                print(f"  {g('OK')} Используется: {c(str(path))}")
+                return path
+            else:
+                print(f"  {r('Сохранённая папка не найдена:')} {default}")
+                print(f"  {dim('Введите новый путь:')}")
+                continue
+        if raw == "" and not default:
             return None
         path = Path(raw).resolve()
         if path.exists() and path.is_dir():
@@ -498,10 +522,14 @@ def ask_sections():
 def ask_export():
     """Спрашивает куда сохранить отчёт."""
     print(f"\n  {a('Сохранить отчёт в файл .txt?')}")
-    print(f"  {dim('Введите путь к файлу, например: C:\\Users\\Имя\\report.txt')}")
-    print(f"  {dim('Или оставьте пустым чтобы не сохранять')}")
+    print(f"  {dim('Сохранено: ')}{c(DEFAULT_OUT)}  {dim('(Enter чтобы использовать, или введите новый путь)')}")
+    print(f"  {dim('Введите 0 чтобы не сохранять')}")
     raw = input(f"  {g('> ')}").strip().strip('"').strip("'")
-    return raw if raw else None
+    if raw == "0":
+        return None
+    if raw == "":
+        return DEFAULT_OUT
+    return raw
 
 
 def interactive_form():
@@ -510,17 +538,19 @@ def interactive_form():
     print(f"  {bold(g('PYSCOPE'))}  {dim('Universal Code Analyzer v2.0')}")
     print(f"{'=' * 70}")
     print(f"  {dim('Анализирует проекты на любом языке. До 4 папок за один запуск.')}")
+    print(f"  {dim('Папки сохранены — просто нажимайте Enter для подтверждения.')}")
     print(f"{'=' * 70}")
 
     folders = []
     labels = [
-        "Папка 1 — введите путь к проекту:",
-        "Папка 2 — введите путь к проекту (или Enter чтобы пропустить):",
-        "Папка 3 — введите путь к проекту (или Enter чтобы пропустить):",
-        "Папка 4 — введите путь к проекту (или Enter чтобы пропустить):",
+        "Папка 1:",
+        "Папка 2 (Enter чтобы пропустить):",
+        "Папка 3 (Enter чтобы пропустить):",
+        "Папка 4 (Enter чтобы пропустить):",
     ]
     for i, label in enumerate(labels):
-        path = ask_folder(label, i + 1)
+        default = DEFAULT_FOLDERS[i] if i < len(DEFAULT_FOLDERS) else None
+        path = ask_folder(label, i + 1, default=default)
         if path is None and i == 0:
             print(r("\n  Нужно указать хотя бы одну папку."))
             return interactive_form()
