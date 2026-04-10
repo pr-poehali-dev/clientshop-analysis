@@ -464,4 +464,12 @@ def main():
     input(dim("  Нажмите Enter для выхода..."))
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        print("\n" + "─" * 70)
+        print(f"  ОШИБКА: {e}")
+        print("─" * 70)
+        traceback.print_exc()
+        input("\n  Нажмите Enter для выхода...")
