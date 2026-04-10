@@ -180,6 +180,20 @@ export default function AppShell({
               <Icon name="Download" size={11} />
               СКАЧАТЬ db_schema.py
             </a>
+            <a
+              href="/db_tables.py"
+              download="db_tables.py"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
+              style={{
+                background: "transparent",
+                color: "var(--term-amber)",
+                border: "1px solid var(--term-amber)",
+                textDecoration: "none",
+              }}
+            >
+              <Icon name="Download" size={11} />
+              СКАЧАТЬ db_tables.py
+            </a>
           </div>
           <span className="flex items-center gap-1.5">
             <span
