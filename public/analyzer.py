@@ -53,7 +53,8 @@ def section_header(title):
 SKIP_DIRS = {"tests", "test", "__pycache__", ".venv", "venv", "env", ".git",
              "node_modules", ".idea", ".vs", "bin", "obj", "dist", "build", ".svn",
              "UpdBackups", "updbackups", "Backup", "backup", "backups", "Backups",
-             "Archive", "archive", "Old", "old"}
+             "Archive", "archive", "Old", "old",
+             "udf", "UDF", "32", "64", "32n", "64n"}
 
 KNOWN_LANGS = {
     ".py":   "Python",
@@ -654,35 +655,53 @@ def print_universal_stats(root, all_files):
 
 
 def print_universal_keywords(all_files):
-    """Ищет бизнес-ключевые слова во всех файлах."""
+    """Ищет бизнес-ключевые слова — только в коде, не в HTML/лицензиях."""
     section_header("Бизнес-логика — ключевые слова")
 
+    # Расширения где ищем (исключаем HTML, CSS, лицензионные SQL)
+    CODE_EXTS = {".ts", ".js", ".py", ".php", ".cs", ".java", ".json", ".xml", ".ps1"}
+
     BUSINESS = {
-        "Авторизация / Пользователи": ["login", "logout", "auth", "password", "user", "register", "token", "session", "permission", "role"],
-        "Заказы / Корзина":           ["order", "cart", "checkout", "purchase", "basket", "buy", "sale"],
-        "Оплата":                     ["payment", "pay", "invoice", "billing", "charge", "transaction", "stripe", "refund"],
-        "Товары / Каталог":           ["product", "catalog", "category", "item", "stock", "price", "discount"],
-        "Уведомления":                ["email", "sms", "notify", "notification", "alert", "send", "message"],
-        "База данных":                ["database", "query", "select", "insert", "update", "delete", "migration", "model"],
-        "API / Маршруты":             ["route", "endpoint", "api", "request", "response", "controller", "view", "url"],
-        "Файлы / Загрузка":           ["upload", "download", "file", "image", "storage", "s3", "media"],
+        "Авторизация / Пользователи": ["login", "logout", "auth", "password", "register", "token", "session", "permission", "role"],
+        "Заказы / Продажи":           ["simplesale", "checksale", "sale", "order", "checkout", "purchase"],
+        "Оплата / Долги":             ["payment", "pay", "invoice", "buyerdebt", "charge", "transaction", "refund", "doc_pays"],
+        "Товары / Каталог":           ["goods", "product", "catalog", "category", "stock", "dir_goods", "price_", "discount", "art"],
+        "Уведомления / SMS":          ["sms", "notify", "notification", "alert", "sendmessage"],
+        "База данных / Таблицы":      ["doc_", "dir_", "database", "connectionstring", "fdb", "firebird", "getactivegoods"],
+        "Отчёты":                     ["report", "setname", "addcolumn", "createreport", "addrow", "setvalue"],
+        "Инвентаризация":             ["invsession", "inventory", "остаток", "остатки", "приход", "расход"],
     }
+
+    # Строки которые пропускаем (лицензии, комментарии, HTML-теги)
+    SKIP_PATTERNS = [
+        "license", "copyright", "mozilla", "initial developer",
+        "contents of this file", "you may not use",
+        "<span", "<font", "<meta", "<table", "border-width",
+        "border-collapse", "stylesheet", "fbudf_api",
+    ]
 
     found = defaultdict(list)
     for fpath in all_files:
+        if fpath.suffix.lower() not in CODE_EXTS:
+            continue
         try:
-            text = fpath.read_text(encoding="utf-8", errors="ignore").lower()
+            text = fpath.read_text(encoding="utf-8", errors="ignore")
             lines = text.splitlines()
             for category, keywords in BUSINESS.items():
-                hits = []
                 for i, line in enumerate(lines, 1):
+                    line_low = line.lower().strip()
+                    # Пропускаем пустые, комментарии-лицензии и HTML
+                    if not line_low or len(line_low) < 5:
+                        continue
+                    if any(sp in line_low for sp in SKIP_PATTERNS):
+                        continue
                     for kw in keywords:
-                        if kw in line:
-                            snippet = line.strip()[:60]
-                            hits.append(f"{fpath.name}:{i}  {snippet}")
+                        if kw in line_low:
+                            snippet = line.strip()[:70]
+                            entry = f"{fpath.name}:{i}  {snippet}"
+                            if entry not in found[category]:
+                                found[category].append(entry)
                             break
-                if hits:
-                    found[category].extend(hits[:3])
         except Exception:
             pass
 
@@ -692,7 +711,7 @@ def print_universal_keywords(all_files):
 
     for category, hits in found.items():
         print(f"\n  {c('>')} {bold(category)}")
-        for h in hits[:5]:
+        for h in hits[:6]:
             print(f"    {dim('-')}  {g(h)}")
 
 
@@ -738,11 +757,16 @@ def print_universal_deps(root, all_files):
                     mod = m.group(1).split("/")[0]
                     if mod and not mod.startswith(".") and mod not in STOPWORDS:
                         ts_modules[mod] += 1
+                # TypeScript может содержать SQL-запросы в строках
+                for m in pat_sql_tbl.finditer(text):
+                    tbl = m.group(1).lower()
+                    if len(tbl) > 3 and tbl not in STOPWORDS and not tbl.isdigit():
+                        sql_tables[tbl] += 1
 
             elif ext == ".sql":
                 for m in pat_sql_tbl.finditer(text):
                     tbl = m.group(1).lower()
-                    if len(tbl) > 2 and tbl not in STOPWORDS:
+                    if len(tbl) > 3 and tbl not in STOPWORDS and not tbl.isdigit():
                         sql_tables[tbl] += 1
 
             elif ext == ".php":
