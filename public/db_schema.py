@@ -93,6 +93,21 @@ SQL_TABLES = """
     ORDER BY r.RDB$RELATION_NAME
 """
 
+SQL_ALL_OBJECTS = """
+    SELECT
+        TRIM(r.RDB$RELATION_NAME)  AS obj_name,
+        r.RDB$RELATION_TYPE        AS obj_type,
+        r.RDB$SYSTEM_FLAG          AS is_system
+    FROM RDB$RELATIONS r
+    ORDER BY r.RDB$SYSTEM_FLAG, r.RDB$RELATION_TYPE, r.RDB$RELATION_NAME
+"""
+
+SQL_ALL_FILES = """
+    SELECT TRIM(f.RDB$FILE_NAME), f.RDB$FILE_SEQUENCE
+    FROM RDB$FILES f
+    ORDER BY f.RDB$FILE_SEQUENCE
+"""
+
 SQL_COLUMNS = """
     SELECT
         TRIM(rf.RDB$FIELD_NAME)          AS col_name,
@@ -275,6 +290,42 @@ def run_schema(con, out_file=None):
     import io, re
 
     cur = con.cursor()
+
+    # --- Диагностика: все объекты без фильтров ---
+    print(f"\n{'=' * 70}")
+    print(f"  {a('ДИАГНОСТИКА — ВСЕ ОБЪЕКТЫ БАЗЫ (включая системные)')}")
+    print(f"{'=' * 70}")
+
+    TYPE_NAMES = {0: "ТАБЛИЦА", 1: "VIEW", 2: "EXTERNAL", 3: "VIRTUAL", 4: "GLOBAL_TMP", 5: "LOCAL_TMP"}
+    try:
+        cur.execute(SQL_ALL_OBJECTS)
+        all_objs = cur.fetchall()
+        user_tables   = [(n, t) for n, t, s in all_objs if s == 0 and t == 0]
+        user_views    = [(n, t) for n, t, s in all_objs if s == 0 and t == 1]
+        system_tables = [(n, t) for n, t, s in all_objs if s != 0]
+        print(f"  {g('Пользовательских таблиц:')} {len(user_tables)}")
+        print(f"  {c('Представлений (Views):  ')} {len(user_views)}")
+        print(f"  {dim('Системных объектов:     ')} {len(system_tables)}")
+        print(f"\n  {a('Все пользовательские таблицы:')}")
+        for name, ttype in sorted(user_tables):
+            print(f"    {g(name)}")
+        if user_views:
+            print(f"\n  {a('Все представления (Views):')}")
+            for name, _ in sorted(user_views):
+                print(f"    {c(name)}")
+    except Exception as e:
+        print(f"  {r('Ошибка диагностики:')} {e}")
+
+    # --- Подключённые файлы базы ---
+    try:
+        cur.execute(SQL_ALL_FILES)
+        files = cur.fetchall()
+        if files:
+            print(f"\n  {a('Подключённые файлы базы:')}")
+            for fname, fseq in files:
+                print(f"    [{fseq}] {c(fname)}")
+    except Exception:
+        pass
 
     # Список таблиц
     cur.execute(SQL_TABLES)
