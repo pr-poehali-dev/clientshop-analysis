@@ -505,9 +505,9 @@ def ask_export():
 def interactive_form():
     """Главная форма ввода."""
     print(f"\n{'=' * 70}")
-    print(f"  {bold(g('PYSCOPE'))}  {dim('Python Code Analyzer v1.0.0')}")
+    print(f"  {bold(g('PYSCOPE'))}  {dim('Universal Code Analyzer v2.0')}")
     print(f"{'=' * 70}")
-    print(f"  {dim('Анализатор Python-проектов. Поддерживает до 4 папок за один запуск.')}")
+    print(f"  {dim('Анализирует проекты на любом языке. До 4 папок за один запуск.')}")
     print(f"{'=' * 70}")
 
     folders = []
@@ -535,28 +535,193 @@ def interactive_form():
 # --- Main --------------------------------------------------------------------
 
 
+def collect_all_files(root):
+    """Собирает ВСЕ файлы с исходным кодом любого языка."""
+    all_files = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.suffix.lower() in KNOWN_LANGS:
+            all_files.append(path)
+    return all_files
+
+
+def print_universal_overview(root, all_files):
+    """Обзор проекта для любого языка."""
+    section_header("Обзор проекта")
+
+    # Статистика по языкам
+    by_lang = defaultdict(list)
+    for f in all_files:
+        by_lang[f.suffix.lower()].append(f)
+
+    total_lines = 0
+    total_code  = 0
+    total_files = len(all_files)
+
+    print(f"  Папка:              {c(str(root))}")
+    print(f"  Всего файлов кода:  {g(str(total_files))}")
+    print(f"\n  {'Язык':<16} {'Расш.':<8} {'Файлов':>7}  Доля")
+    print(f"  {'-'*16} {'-'*8} {'-'*7}  {'-'*20}")
+
+    for ext, files in sorted(by_lang.items(), key=lambda x: -len(x[1])):
+        lang = KNOWN_LANGS.get(ext, ext)
+        cnt  = len(files)
+        pct  = round(cnt / total_files * 100) if total_files else 0
+        bar  = g("#" * (pct // 4))
+        for f in files:
+            st = count_lines(f)
+            total_lines += st["total"]
+            total_code  += st["code"]
+        print(f"  {lang:<16} {ext:<8} {str(cnt):>7}  {bar} {dim(str(pct) + '%')}")
+
+    print(f"\n  Всего строк:        {g(str(total_lines))}")
+    if total_lines:
+        print(f"  Строки кода (~):    {c(str(total_code))}  ({round(total_code/total_lines*100)}%)")
+
+
+def print_universal_tree(root, all_files):
+    """Дерево файлов для любого языка."""
+    section_header("Структура проекта")
+    tree_nodes = build_tree(all_files, root)
+    print(f"  {a(root.name + '/')}")
+    for node in tree_nodes:
+        if node["depth"] == 0:
+            continue
+        spaces    = "    " * (node["depth"] - 1)
+        connector = "+-- " if node["depth"] == 1 else "|   +-- "
+        if node["type"] == "dir":
+            print(f"  {dim(spaces + connector)}{a(node['name'])}")
+        else:
+            ext = Path(node["name"]).suffix.lower()
+            lang = KNOWN_LANGS.get(ext, "")
+            lang_str = "  " + dim("[" + lang + "]") if lang else ""
+            lines_str = "  " + dim(str(node["lines"]) + " стр") if node["lines"] else ""
+            col = a if node["lines"] and node["lines"] > 500 else g
+            print(f"  {dim(spaces + connector)}{col(node['name'])}{lang_str}{lines_str}")
+    print(f"\n  {dim('Итого:')} {g(str(len(all_files)))} файлов")
+
+
+def print_universal_stats(root, all_files):
+    """Статистика строк для любого языка."""
+    section_header("Статистика по файлам")
+    rows = []
+    for f in all_files:
+        st = count_lines(f)
+        rows.append((f.relative_to(root), st["total"], st["code"]))
+    rows.sort(key=lambda x: -x[1])
+    print(f"  {'Файл':<50} {'Строк':>6}  {'Код':>6}")
+    print(f"  {'-'*50} {'-'*6}  {'-'*6}")
+    for rel, total, code in rows[:40]:
+        col = a if total > 500 else g
+        print(f"  {col(str(rel)):<59} {total:>6}  {dim(str(code)):>6}")
+    if len(rows) > 40:
+        print(f"  {dim('... и ещё ' + str(len(rows)-40) + ' файлов')}")
+
+
+def print_universal_keywords(all_files):
+    """Ищет бизнес-ключевые слова во всех файлах."""
+    section_header("Бизнес-логика — ключевые слова")
+
+    BUSINESS = {
+        "Авторизация / Пользователи": ["login", "logout", "auth", "password", "user", "register", "token", "session", "permission", "role"],
+        "Заказы / Корзина":           ["order", "cart", "checkout", "purchase", "basket", "buy", "sale"],
+        "Оплата":                     ["payment", "pay", "invoice", "billing", "charge", "transaction", "stripe", "refund"],
+        "Товары / Каталог":           ["product", "catalog", "category", "item", "stock", "price", "discount"],
+        "Уведомления":                ["email", "sms", "notify", "notification", "alert", "send", "message"],
+        "База данных":                ["database", "query", "select", "insert", "update", "delete", "migration", "model"],
+        "API / Маршруты":             ["route", "endpoint", "api", "request", "response", "controller", "view", "url"],
+        "Файлы / Загрузка":           ["upload", "download", "file", "image", "storage", "s3", "media"],
+    }
+
+    found = defaultdict(list)
+    for fpath in all_files:
+        try:
+            text = fpath.read_text(encoding="utf-8", errors="ignore").lower()
+            lines = text.splitlines()
+            for category, keywords in BUSINESS.items():
+                hits = []
+                for i, line in enumerate(lines, 1):
+                    for kw in keywords:
+                        if kw in line:
+                            snippet = line.strip()[:60]
+                            hits.append(f"{fpath.name}:{i}  {snippet}")
+                            break
+                if hits:
+                    found[category].extend(hits[:3])
+        except Exception:
+            pass
+
+    if not found:
+        print(f"  {dim('Ключевых бизнес-слов не найдено.')}")
+        return
+
+    for category, hits in found.items():
+        print(f"\n  {c('>')} {bold(category)}")
+        for h in hits[:5]:
+            print(f"    {dim('-')}  {g(h)}")
+
+
+def print_universal_deps(root, all_files):
+    """Анализ зависимостей — include/import/require во всех файлах."""
+    section_header("Зависимости и подключения")
+
+    IMPORT_PATTERNS = [
+        r'import\s+[\w,\s{}*]+\s+from\s+["\'](.+?)["\']',   # JS/TS
+        r'require\s*\(\s*["\'](.+?)["\']\s*\)',               # JS/PHP
+        r'import\s+([\w.]+)',                                  # Python/Java
+        r'use\s+([\w\\]+)',                                    # PHP
+        r'#include\s+[<"](.+?)[>"]',                          # C/C++
+        r'using\s+([\w.]+)',                                   # C#
+    ]
+
+    counter = defaultdict(int)
+    for fpath in all_files:
+        try:
+            text = fpath.read_text(encoding="utf-8", errors="ignore")
+            for pattern in IMPORT_PATTERNS:
+                for match in re.finditer(pattern, text, re.IGNORECASE):
+                    dep = match.group(1).strip().split("/")[0].split("\\")[0]
+                    if dep and not dep.startswith("."):
+                        counter[dep] += 1
+        except Exception:
+            pass
+
+    if not counter:
+        print(f"  {dim('Зависимостей не найдено.')}")
+        return
+
+    print(f"  {'Зависимость':<30} {'Упоминаний':>10}  График")
+    print(f"  {'-'*30} {'-'*10}  {'-'*25}")
+    for dep, cnt in sorted(counter.items(), key=lambda x: -x[1])[:30]:
+        bar = g("#" * min(cnt, 25))
+        print(f"  {c(dep):<30} {str(cnt):>10}  {bar}")
+
+
 def analyze_folder(root, active_sections, out_file=None):
-    """Анализирует одну папку и выводит результат."""
+    """Универсальный анализ папки — любой язык программирования."""
     print(f"\n{'=' * 70}")
     print(f"  {bold(g('АНАЛИЗ:'))} {c(root.name)}")
     print(f"  {dim(str(root))}")
     print(f"{'=' * 70}")
 
-    files = collect_files(root)
-    if not files:
-        print(r("  Файлы .py не найдены (или все отфильтрованы как тестовые)."))
+    all_files = collect_all_files(root)
+    if not all_files:
+        print(r("  Файлы с исходным кодом не найдены."))
         return
 
-    root_modules = {f.stem for f in root.iterdir() if f.is_dir() or f.suffix == ".py"}
-    print(f"  {dim('Найдено .py файлов:')} {g(str(len(files)))}  {dim('(тест-файлы исключены)')}")
+    # Python-файлы для глубокого AST-анализа
+    py_files = [f for f in all_files if f.suffix.lower() == ".py"]
 
-    stats_per_file = {}
+    stats_per_file     = {}
     complexity_per_file = {}
     all_classes = []
-    all_funcs = []
+    all_funcs   = []
     all_imports = []
 
-    for fpath in files:
+    for fpath in py_files:
         stats_per_file[str(fpath)] = count_lines(fpath)
         tree, source = parse_file(fpath)
         if tree is None:
@@ -566,20 +731,43 @@ def analyze_folder(root, active_sections, out_file=None):
         all_funcs.extend(extract_functions(tree, fpath))
         all_imports.extend(extract_imports(tree))
 
-    tree_nodes = build_tree(files, root)
-    flows = detect_flows(all_funcs)
+    # Для не-Python файлов добавляем в статистику
+    for fpath in all_files:
+        key = str(fpath)
+        if key not in stats_per_file:
+            stats_per_file[key] = count_lines(fpath)
+
+    root_modules = {f.stem for f in root.iterdir() if f.is_dir() or f.suffix == ".py"}
 
     captured = {}
     for sec in active_sections:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            if sec == "overview":    print_overview(stats_per_file, files, all_classes)
-            elif sec == "stats":     print_stats(stats_per_file, complexity_per_file)
-            elif sec == "classes":   print_classes(all_classes)
-            elif sec == "functions": print_functions(all_funcs)
-            elif sec == "deps":      print_deps(all_imports, root_modules)
-            elif sec == "tree":      print_tree(tree_nodes, root)
-            elif sec == "flows":     print_flows(flows)
+            if sec == "overview":
+                print_universal_overview(root, all_files)
+            elif sec == "tree":
+                print_universal_tree(root, all_files)
+            elif sec == "stats":
+                print_universal_stats(root, all_files)
+            elif sec == "deps":
+                print_universal_deps(root, all_files)
+            elif sec == "flows":
+                # Бизнес-ключевые слова для любого языка
+                print_universal_keywords(all_files)
+                # Если есть Python — ещё и AST-потоки
+                if all_funcs:
+                    flows = detect_flows(all_funcs)
+                    print_flows(flows)
+            elif sec == "classes" and all_classes:
+                print_classes(all_classes)
+            elif sec == "classes":
+                section_header("Классы и иерархия")
+                print(f"  {dim('Python-классы не найдены. Проект написан на другом языке.')}")
+            elif sec == "functions" and all_funcs:
+                print_functions(all_funcs)
+            elif sec == "functions":
+                section_header("Функции и методы")
+                print(f"  {dim('Python-функции не найдены. Проект написан на другом языке.')}")
         output = buf.getvalue()
         captured[sec] = output
         print(output, end="")
@@ -587,7 +775,9 @@ def analyze_folder(root, active_sections, out_file=None):
     print(f"\n{SEP}\n")
 
     if out_file:
-        folder_out = out_file.replace(".txt", f"_{root.name}.txt")
+        # Сохраняем с именем папки
+        base = out_file if out_file.endswith(".txt") else out_file + ".txt"
+        folder_out = base.replace(".txt", f"_{root.name}.txt")
         export_report(folder_out, captured)
 
 
