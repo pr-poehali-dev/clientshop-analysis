@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Icon from "@/components/ui/icon";
-import { MOCK_PROJECT, TABS } from "./data";
+import { MOCK_PROJECT, TABS, getTabText } from "./data";
+import { CopyButton } from "./ui";
 
 interface AppShellProps {
   activeTab: string;
@@ -120,7 +121,7 @@ export default function AppShell({
 
       {/* Tabs */}
       <div
-        className="flex overflow-x-auto border-b"
+        className="flex overflow-x-auto border-b items-center"
         style={{ background: "var(--term-surface)", borderColor: "var(--term-border)" }}
       >
         {TABS.map((tab) => (
@@ -135,6 +136,9 @@ export default function AppShell({
             {tab.label}
           </button>
         ))}
+        <div className="ml-auto px-3 shrink-0">
+          <CopyButton text={getTabText(activeTab)} />
+        </div>
       </div>
 
       {/* Content */}

@@ -172,3 +172,118 @@ export const TABS = [
   { id: "tree", label: "ДЕРЕВО", icon: "FolderTree" },
   { id: "flows", label: "ПРОЦЕССЫ", icon: "Workflow" },
 ];
+
+export function getTabText(tabId: string): string {
+  const sep = "─".repeat(60);
+
+  if (tabId === "overview") {
+    return [
+      `PYSCOPE — Обзор проекта: ${MOCK_PROJECT.name}`,
+      `Путь: ${MOCK_PROJECT.path}`,
+      `Дата сканирования: ${MOCK_PROJECT.lastScan}`,
+      sep,
+      `Всего строк:    ${STATS.totalLines.toLocaleString()}`,
+      `Чистый код:     ${STATS.codeLines.toLocaleString()}`,
+      `Комментарии:    ${STATS.commentLines.toLocaleString()}`,
+      `Пустые строки:  ${STATS.blankLines.toLocaleString()}`,
+      `Файлов .py:     ${MOCK_PROJECT.analyzedFiles} (тесты исключены: ${MOCK_PROJECT.testFiles})`,
+      `Классов:        ${CLASSES.length}`,
+      sep,
+      "Сложность по файлам (CC):",
+      ...COMPLEXITY.map((c) => `  ${c.name.padEnd(30)} CC=${c.cc}  [${c.grade}]`),
+    ].join("\n");
+  }
+
+  if (tabId === "stats") {
+    return [
+      `PYSCOPE — Статистика: ${MOCK_PROJECT.name}`,
+      sep,
+      `Всего строк:       ${STATS.totalLines.toLocaleString()}`,
+      `Строки кода:       ${STATS.codeLines.toLocaleString()}`,
+      `Комментарии:       ${STATS.commentLines.toLocaleString()}`,
+      `Пустые строки:     ${STATS.blankLines.toLocaleString()}`,
+      `Среднее / файл:    ${STATS.avgLinesPerFile} строк`,
+      `Макс. файл:        ${STATS.maxLinesFile} (${STATS.maxLines} строк)`,
+      sep,
+      "Cyclomatic Complexity:",
+      ...COMPLEXITY.map(
+        (c) => `  ${c.name.padEnd(30)} CC=${String(c.cc).padStart(3)}  GRADE ${c.grade}`
+      ),
+      sep,
+      "Шкала: [A] 1–10 Простой | [B] 11–20 Умеренный | [C] 21–30 Сложный | [D] 31+ Очень сложный",
+    ].join("\n");
+  }
+
+  if (tabId === "classes") {
+    const lines = [`PYSCOPE — Классы: ${MOCK_PROJECT.name}`, sep];
+    CLASSES.forEach((cls) => {
+      lines.push(`class ${cls.name}${cls.parents.length ? `(${cls.parents.join(", ")})` : ""}`);
+      lines.push(`  Файл:      ${cls.file}`);
+      lines.push(`  Методов:   ${cls.methods}`);
+      lines.push(`  Атрибутов: ${cls.properties}`);
+      if (cls.children.length) {
+        lines.push(`  Наследники: ${cls.children.join(", ")}`);
+      }
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  if (tabId === "functions") {
+    return [
+      `PYSCOPE — Функции и методы: ${MOCK_PROJECT.name}`,
+      sep,
+      ...FUNCTIONS.map(
+        (f, i) =>
+          `${String(i + 1).padStart(2, "0")}. ${f.async ? "async " : ""}def ${f.name.padEnd(28)} ` +
+          `params=${f.params}  lines=${f.lines}  → ${f.returns}  [${f.file}]`
+      ),
+    ].join("\n");
+  }
+
+  if (tabId === "deps") {
+    return [
+      `PYSCOPE — Зависимости: ${MOCK_PROJECT.name}`,
+      sep,
+      "Сторонние библиотеки:",
+      ...DEPENDENCIES.thirdparty.map(
+        (d) => `  ${d.name.padEnd(16)} v${d.version.padEnd(12)} импортов: ${d.usedIn}`
+      ),
+      sep,
+      `Стандартная библиотека: ${DEPENDENCIES.stdlib.join(", ")}`,
+      sep,
+      `Внутренние модули: ${DEPENDENCIES.internal.join(", ")}`,
+    ].join("\n");
+  }
+
+  if (tabId === "tree") {
+    const lines = [`PYSCOPE — Дерево проекта: ${MOCK_PROJECT.name}`, sep];
+    FILE_TREE.forEach((item) => {
+      const spaces = "    ".repeat(item.depth);
+      const connector =
+        item.depth === 0 ? "" : item.depth === 1 ? "├── " : "│   └── ";
+      const suffix = item.lines ? `  (${item.lines} стр)` : "";
+      lines.push(`${spaces}${connector}${item.name}${suffix}`);
+    });
+    lines.push(sep);
+    lines.push(
+      `Файлов .py: ${FILE_TREE.filter((f) => f.type === "file").length}  ` +
+        `Директорий: ${FILE_TREE.filter((f) => f.type === "dir").length}`
+    );
+    return lines.join("\n");
+  }
+
+  if (tabId === "flows") {
+    const lines = [`PYSCOPE — Бизнес-процессы: ${MOCK_PROJECT.name}`, sep];
+    BUSINESS_FLOWS.forEach((flow) => {
+      lines.push(`▶ ${flow.name}  (файлы: ${flow.files.join(", ")})`);
+      flow.steps.forEach((step, i) => {
+        lines.push(`  ${i + 1}. ${step}`);
+      });
+      lines.push("");
+    });
+    return lines.join("\n");
+  }
+
+  return "";
+}

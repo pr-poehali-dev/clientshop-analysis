@@ -1,3 +1,5 @@
+import React from "react";
+
 export function ProgressBar({
   value,
   max,
@@ -73,4 +75,45 @@ export function gradeColor(g: string): string {
     : g === "B"
     ? "var(--term-cyan)"
     : "var(--term-green)";
+}
+
+export function useCopy() {
+  const [copied, setCopied] = React.useState(false);
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return { copied, copy };
+}
+
+export function CopyButton({ text }: { text: string }) {
+  const { copied, copy } = useCopy();
+
+  return (
+    <button
+      onClick={() => copy(text)}
+      className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
+      style={{
+        background: copied ? "rgba(57,255,20,0.12)" : "transparent",
+        color: copied ? "var(--term-green)" : "var(--term-text-dim)",
+        border: `1px solid ${copied ? "var(--term-green)" : "var(--term-border)"}`,
+      }}
+    >
+      {copied ? (
+        <>
+          <span>✓</span>
+          <span>СКОПИРОВАНО</span>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 10 }}>⎘</span>
+          <span>КОПИРОВАТЬ</span>
+        </>
+      )}
+    </button>
+  );
 }
