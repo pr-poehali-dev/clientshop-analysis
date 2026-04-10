@@ -899,6 +899,118 @@ def analyze_folder(root, active_sections, out_file=None):
         export_report(folder_out, captured)
 
 
+def print_architecture(all_folders_data):
+    """Архитектурный анализ — всё необходимое для проектирования веб-приложения."""
+    print(f"\n{'=' * 70}")
+    print(f"  {bold(g('АРХИТЕКТУРНЫЙ АНАЛИЗ — ОСНОВА ДЛЯ ВЕБ-ПРИЛОЖЕНИЯ'))}")
+    print(f"{'=' * 70}")
+
+    # Собираем все таблицы по всем папкам
+    all_tables = defaultdict(int)
+    all_biz    = defaultdict(list)
+    for d in all_folders_data:
+        for tbl, cnt in d["sql_tables"].items():
+            all_tables[tbl] += cnt
+        for cat, hits in d["biz_keywords"].items():
+            for h in hits:
+                entry = f"[{d['name']}]  {h}"
+                if entry not in all_biz[cat]:
+                    all_biz[cat].append(entry)
+
+    # ── 1. Модули веб-приложения ─────────────────────────────────────────
+    print(f"\n  {a('1. МОДУЛИ ВЕБ-ПРИЛОЖЕНИЯ (предлагаемые страницы/разделы):')}")
+    modules = [
+        ("Товары и каталог",     ["dir_goods", "dir_goods_scan", "dir_goods_price", "goods"], "Просмотр, поиск, редактирование товаров, цен, штрихкодов"),
+        ("Продажи и чеки",       ["doc_sale", "doc_sale_table", "simplesale"], "История продаж, детализация чеков, возвраты"),
+        ("Инвентаризация",       ["doc_invsession", "doc_invsession_table", "invsession"], "Сессии инвентаризации, сравнение остатков"),
+        ("Закупки и поставщики", ["dir_purchases", "doc_session", "doc_session_table"], "Сессии закупок, поставщики, приход товара"),
+        ("Контрагенты / Долги",  ["dir_contragents", "doc_pays", "buyersdebts", "buyerdebt"], "Покупатели, долги, история оплат"),
+        ("Отчёты и аналитика",   ["doc_date", "salesreturns", "datedays", "oborot"], "Обороты, средний чек, остатки по периодам"),
+        ("Скидки и цены",        ["dir_discounts", "doc_changeprices", "price_", "discount"], "Управление скидками, переоценка"),
+        ("Склад / Остатки",      ["exist", "doc_balance", "doc_return", "остаток"], "Текущие остатки, движение товара"),
+        ("Настройки",            ["database", "connectionstring", "config", "fdb"], "Подключение к БД, конфигурация"),
+        ("EDO / ЕГАИС",          ["sbis", "egais", "edo", "xml"], "Электронный документооборот, алкоголь"),
+    ]
+
+    for name, keywords, desc in modules:
+        found = any(k in all_tables or any(k in h.lower() for hits in all_biz.values() for h in hits) for k in keywords)
+        status = g("✓ найдено в коде") if found else dim("~ возможно нужен")
+        print(f"\n  {c(name)}")
+        print(f"    {dim('Описание:  ')}{desc}")
+        print(f"    {dim('Статус:    ')}{status}")
+        related = [tbl for tbl in all_tables if any(k in tbl for k in keywords)]
+        if related:
+            print(f"    {dim('Таблицы:   ')}{g(', '.join(related[:6]))}")
+
+    # ── 2. Схема базы данных ─────────────────────────────────────────────
+    print(f"\n\n  {a('2. СХЕМА БАЗЫ ДАННЫХ FIREBIRD (из анализа кода):')}")
+    groups = {
+        "Справочники (DIR_*)":  [(t, c_) for t, c_ in all_tables.items() if t.startswith("dir_")],
+        "Документы (DOC_*)":    [(t, c_) for t, c_ in all_tables.items() if t.startswith("doc_")],
+        "Прочие таблицы":       [(t, c_) for t, c_ in all_tables.items() if not t.startswith("dir_") and not t.startswith("doc_")],
+    }
+    for group_name, items in groups.items():
+        if not items:
+            continue
+        print(f"\n  {c(group_name)}:")
+        for tbl, cnt in sorted(items, key=lambda x: -x[1]):
+            bar = g("#" * min(cnt, 15))
+            print(f"    {g(tbl):<40} {bar}  {dim(str(cnt) + ' упом.')}")
+
+    # ── 3. API-эндпоинты ─────────────────────────────────────────────────
+    print(f"\n\n  {a('3. ПРЕДЛАГАЕМЫЕ API-ЭНДПОИНТЫ для веб-приложения:')}")
+    endpoints = [
+        ("GET",    "/api/goods",                  "Список товаров с ценами и остатками"),
+        ("GET",    "/api/goods/:id",               "Карточка товара"),
+        ("GET",    "/api/goods/search?q=",         "Поиск по названию / штрихкоду"),
+        ("GET",    "/api/sales",                   "История продаж за период"),
+        ("GET",    "/api/sales/:id",               "Детализация чека"),
+        ("GET",    "/api/inventory/sessions",      "Список сессий инвентаризации"),
+        ("GET",    "/api/inventory/:id/compare",   "Сравнение сессии с остатками"),
+        ("GET",    "/api/purchases/sessions",      "Сессии закупок"),
+        ("GET",    "/api/contragents",             "Покупатели и контрагенты"),
+        ("GET",    "/api/contragents/:id/debt",    "Долги покупателя"),
+        ("GET",    "/api/reports/turnover",        "Отчёт: оборот магазина"),
+        ("GET",    "/api/reports/avg-check",       "Отчёт: средний чек"),
+        ("GET",    "/api/reports/stock",           "Отчёт: остатки товаров"),
+        ("GET",    "/api/discounts",               "Список скидок"),
+        ("GET",    "/api/config",                  "Конфигурация подключения"),
+    ]
+    print(f"  {'Метод':<6} {'Маршрут':<40} Описание")
+    print(f"  {'-'*6} {'-'*40} {'-'*25}")
+    for method, route, desc in endpoints:
+        col = g if method == "GET" else a
+        print(f"  {col(method):<15} {c(route):<49} {dim(desc)}")
+
+    # ── 4. Стек технологий ───────────────────────────────────────────────
+    print(f"\n\n  {a('4. РЕКОМЕНДУЕМЫЙ СТЕК ВЕБ-ПРИЛОЖЕНИЯ:')}")
+    stack = [
+        ("База данных",   "Firebird (существующая)  →  читаем напрямую через API"),
+        ("Backend API",   "Python (FastAPI)  —  подключение к Firebird через fdb / firebirdsql"),
+        ("Frontend",      "React + TypeScript  —  уже знакомый формат (.ts файлы в проекте)"),
+        ("Авторизация",   "JWT-токены  —  пользователь/пароль из ClientShop_Program_Config.json"),
+        ("Отчёты",        "Переносим существующие .ts запросы в API-эндпоинты"),
+        ("Развёртывание", "poehali.dev  —  хостинг фронтенда + облачные функции для API"),
+    ]
+    for layer, desc in stack:
+        print(f"\n  {c(layer + ':')}")
+        print(f"    {g(desc)}")
+
+    # ── 5. Следующие шаги ────────────────────────────────────────────────
+    print(f"\n\n  {a('5. СЛЕДУЮЩИЕ ШАГИ:')}")
+    steps = [
+        "Открыть файл ClientShop_Program_Config.json — там строка подключения к Firebird",
+        "Подключиться к базе TASK2.FDB и выгрузить полную схему таблиц (CREATE TABLE)",
+        "Определить приоритетные модули веб-приложения (начать с Товаров и Продаж)",
+        "Создать Python backend с подключением к Firebird",
+        "Построить React-интерфейс — аналог существующих TypeScript-отчётов",
+    ]
+    for i, step in enumerate(steps, 1):
+        print(f"  {g(str(i) + '.')} {step}")
+
+    print(f"\n{'=' * 70}\n")
+
+
 def print_summary(all_folders_data):
     """Сводка по всем папкам — таблицы БД, бизнес-процессы, статистика."""
     print(f"\n{'=' * 70}")
@@ -1066,6 +1178,19 @@ def main():
             with open(summary_path, "w", encoding="utf-8") as f:
                 f.write(ansi_escape.sub("", buf.getvalue()))
             print(f"  {g('OK')} Сводка сохранена: {c(summary_path)}")
+
+    # Архитектурный анализ
+    print_architecture(all_folders_data)
+    if out_file:
+        base = out_file if out_file.endswith(".txt") else out_file + ".txt"
+        arch_path = base.replace(".txt", "_ARCHITECTURE.txt")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            print_architecture(all_folders_data)
+        ansi_escape = re.compile(r"\033\[[0-9;]*m")
+        with open(arch_path, "w", encoding="utf-8") as f:
+            f.write(ansi_escape.sub("", buf.getvalue()))
+        print(f"  {g('OK')} Архитектура сохранена: {c(arch_path)}")
 
     print(f"\n  {g('Анализ завершён.')} Обработано папок: {g(str(len(folders)))}")
     input("  Нажмите Enter для выхода...")
