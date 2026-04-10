@@ -461,5 +461,7 @@ def main():
         export_report(args.out, captured)
         print()
 
+    input(dim("  Нажмите Enter для выхода..."))
+
 if __name__ == "__main__":
     main()
