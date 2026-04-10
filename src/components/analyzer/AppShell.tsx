@@ -150,13 +150,29 @@ export default function AppShell({
         style={{ borderColor: "var(--term-border)" }}
       >
         <span>PyScope — Python Code Analyzer v1.0.0</span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full inline-block blink"
-            style={{ background: "var(--term-green)" }}
-          />
-          ГОТОВ
-        </span>
+        <div className="flex items-center gap-4">
+          <a
+            href="/analyzer.py"
+            download="analyzer.py"
+            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
+            style={{
+              background: "var(--term-green)",
+              color: "#030c03",
+              border: "1px solid var(--term-green)",
+              textDecoration: "none",
+            }}
+          >
+            <Icon name="Download" size={11} />
+            СКАЧАТЬ analyzer.py
+          </a>
+          <span className="flex items-center gap-1.5">
+            <span
+              className="w-1.5 h-1.5 rounded-full inline-block blink"
+              style={{ background: "var(--term-green)" }}
+            />
+            ГОТОВ
+          </span>
+        </div>
       </footer>
     </div>
   );
