@@ -50,15 +50,78 @@ def section_header(title):
 
 # --- Сбор файлов -------------------------------------------------------------
 
-def collect_files(root):
+SKIP_DIRS = {"tests", "test", "__pycache__", ".venv", "venv", "env", ".git",
+             "node_modules", ".idea", ".vs", "bin", "obj", "dist", "build", ".svn"}
+
+KNOWN_LANGS = {
+    ".py":   "Python",
+    ".js":   "JavaScript",
+    ".ts":   "TypeScript",
+    ".php":  "PHP",
+    ".cs":   "C#",
+    ".java": "Java",
+    ".cpp":  "C++",
+    ".c":    "C",
+    ".rb":   "Ruby",
+    ".go":   "Go",
+    ".rs":   "Rust",
+    ".kt":   "Kotlin",
+    ".swift":"Swift",
+    ".html": "HTML",
+    ".css":  "CSS",
+    ".sql":  "SQL",
+    ".sh":   "Shell",
+    ".ps1":  "PowerShell",
+    ".xml":  "XML",
+    ".json": "JSON",
+    ".yaml": "YAML",
+    ".yml":  "YAML",
+}
+
+
+def detect_languages(root):
+    """Сканирует папку и возвращает словарь {расширение: количество файлов}."""
+    counter = defaultdict(int)
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        ext = path.suffix.lower()
+        if ext in KNOWN_LANGS:
+            counter[ext] += 1
+    return dict(sorted(counter.items(), key=lambda x: -x[1]))
+
+
+def ask_language(root):
+    """Показывает найденные языки и просит выбрать один для анализа."""
+    langs = detect_languages(root)
+    if not langs:
+        print(r("  Файлы с исходным кодом не найдены."))
+        return None
+
+    print(f"\n  {a('Найдены файлы в папке')} {c(root.name)}:")
+    items = list(langs.items())
+    for i, (ext, cnt) in enumerate(items, 1):
+        lang = KNOWN_LANGS.get(ext, ext)
+        bar = g("#" * min(cnt, 25))
+        print(f"    {g(str(i))}. {lang:<14} {ext:<6}  {bar}  {dim(str(cnt) + ' файлов')}")
+
+    print(f"\n  {dim('Введите номер языка для анализа:')}")
+    raw = input(f"  {g('> ')}").strip()
+    if raw.isdigit() and 1 <= int(raw) <= len(items):
+        return items[int(raw) - 1][0]
+    return items[0][0]
+
+
+def collect_files(root, ext=".py"):
     files = []
-    for path in sorted(root.rglob("*.py")):
+    for path in sorted(root.rglob("*" + ext)):
         name = path.name
         parts = path.parts
-        if name.startswith("test_") or name.endswith("_test.py"):
+        if ext == ".py" and (name.startswith("test_") or name.endswith("_test.py")):
             continue
-        skip_dirs = {"tests", "test", "__pycache__", ".venv", "venv", "env", ".git", "node_modules"}
-        if any(part in skip_dirs for part in parts):
+        if any(part in SKIP_DIRS for part in parts):
             continue
         files.append(path)
     return files
