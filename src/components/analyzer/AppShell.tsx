@@ -151,20 +151,36 @@ export default function AppShell({
       >
         <span>PyScope — Python Code Analyzer v1.0.0</span>
         <div className="flex items-center gap-4">
-          <a
-            href="/analyzer.py"
-            download="analyzer.py"
-            className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
-            style={{
-              background: "var(--term-green)",
-              color: "#030c03",
-              border: "1px solid var(--term-green)",
-              textDecoration: "none",
-            }}
-          >
-            <Icon name="Download" size={11} />
-            СКАЧАТЬ analyzer.py
-          </a>
+          <div className="flex flex-col gap-1.5">
+            <a
+              href="/analyzer.py"
+              download="analyzer.py"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
+              style={{
+                background: "var(--term-green)",
+                color: "#030c03",
+                border: "1px solid var(--term-green)",
+                textDecoration: "none",
+              }}
+            >
+              <Icon name="Download" size={11} />
+              СКАЧАТЬ analyzer.py
+            </a>
+            <a
+              href="/db_schema.py"
+              download="db_schema.py"
+              className="flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-sm font-semibold tracking-wider transition-all"
+              style={{
+                background: "transparent",
+                color: "var(--term-cyan)",
+                border: "1px solid var(--term-cyan)",
+                textDecoration: "none",
+              }}
+            >
+              <Icon name="Download" size={11} />
+              СКАЧАТЬ db_schema.py
+            </a>
+          </div>
           <span className="flex items-center gap-1.5">
             <span
               className="w-1.5 h-1.5 rounded-full inline-block blink"
