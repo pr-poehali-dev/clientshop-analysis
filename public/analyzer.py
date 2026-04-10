@@ -379,32 +379,110 @@ def export_report(path, sections):
     print(f"\n  {g('OK')} Отчёт сохранён: {c(path)}")
 
 
-# --- Main --------------------------------------------------------------------
+# --- Пользовательская форма --------------------------------------------------
 
 SECTIONS = ["overview", "stats", "classes", "functions", "deps", "tree", "flows"]
 
+SECTION_NAMES = {
+    "overview":  "Обзор проекта",
+    "stats":     "Статистика и сложность",
+    "classes":   "Классы и иерархия",
+    "functions": "Функции и методы",
+    "deps":      "Зависимости",
+    "tree":      "Дерево файлов",
+    "flows":     "Бизнес-процессы",
+}
 
-def main():
-    parser = argparse.ArgumentParser(description="PyScope - анализатор Python-проектов")
-    parser.add_argument("path", help="Путь к папке проекта")
-    parser.add_argument("--section", "-s", choices=SECTIONS + ["all"], default="all")
-    parser.add_argument("--out", "-o", help="Сохранить отчёт в файл .txt")
-    args = parser.parse_args()
 
-    root = Path(args.path).resolve()
-    if not root.exists() or not root.is_dir():
-        print(r("Ошибка: папка не найдена - " + str(root)))
-        sys.exit(1)
+def ask_folder(label, index):
+    """Запрашивает путь к папке у пользователя."""
+    while True:
+        print(f"\n  {a(label)}")
+        print(f"  {dim('Пример: C:\\Users\\Имя\\МойПроект  или  оставьте пустым чтобы пропустить')}")
+        raw = input(f"  {g('> ')}").strip().strip('"').strip("'")
+        if raw == "":
+            return None
+        path = Path(raw).resolve()
+        if path.exists() and path.is_dir():
+            print(f"  {g('OK')} Папка найдена: {c(str(path))}")
+            return path
+        else:
+            print(f"  {r('Папка не найдена, попробуйте ещё раз.')}")
 
-    print(f"\n{SEP}")
+
+def ask_sections():
+    """Выбор разделов анализа."""
+    print(f"\n  {a('Какие разделы анализировать?')}")
+    for i, sec in enumerate(SECTIONS, 1):
+        print(f"    {g(str(i))}. {SECTION_NAMES[sec]}")
+    print(f"    {g('0')}. Все разделы (по умолчанию)")
+    print(f"\n  {dim('Введите номера через запятую, например: 1,3,5  или 0 для всех')}")
+    raw = input(f"  {g('> ')}").strip()
+    if raw == "" or raw == "0":
+        return SECTIONS
+    selected = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            idx = int(part) - 1
+            if 0 <= idx < len(SECTIONS):
+                selected.append(SECTIONS[idx])
+    return selected if selected else SECTIONS
+
+
+def ask_export():
+    """Спрашивает куда сохранить отчёт."""
+    print(f"\n  {a('Сохранить отчёт в файл .txt?')}")
+    print(f"  {dim('Введите путь к файлу, например: C:\\Users\\Имя\\report.txt')}")
+    print(f"  {dim('Или оставьте пустым чтобы не сохранять')}")
+    raw = input(f"  {g('> ')}").strip().strip('"').strip("'")
+    return raw if raw else None
+
+
+def interactive_form():
+    """Главная форма ввода."""
+    print(f"\n{'=' * 70}")
     print(f"  {bold(g('PYSCOPE'))}  {dim('Python Code Analyzer v1.0.0')}")
-    print(f"  {dim('Проект:')} {c(root.name)}  {dim('Путь:')} {dim(str(root))}")
-    print(SEP)
+    print(f"{'=' * 70}")
+    print(f"  {dim('Анализатор Python-проектов. Поддерживает до 4 папок за один запуск.')}")
+    print(f"{'=' * 70}")
+
+    folders = []
+    labels = [
+        "Папка 1 — введите путь к проекту:",
+        "Папка 2 — введите путь к проекту (или Enter чтобы пропустить):",
+        "Папка 3 — введите путь к проекту (или Enter чтобы пропустить):",
+        "Папка 4 — введите путь к проекту (или Enter чтобы пропустить):",
+    ]
+    for i, label in enumerate(labels):
+        path = ask_folder(label, i + 1)
+        if path is None and i == 0:
+            print(r("\n  Нужно указать хотя бы одну папку."))
+            return interactive_form()
+        if path is None:
+            break
+        folders.append(path)
+
+    active_sections = ask_sections()
+    out_file = ask_export()
+
+    return folders, active_sections, out_file
+
+
+# --- Main --------------------------------------------------------------------
+
+
+def analyze_folder(root, active_sections, out_file=None):
+    """Анализирует одну папку и выводит результат."""
+    print(f"\n{'=' * 70}")
+    print(f"  {bold(g('АНАЛИЗ:'))} {c(root.name)}")
+    print(f"  {dim(str(root))}")
+    print(f"{'=' * 70}")
 
     files = collect_files(root)
     if not files:
         print(r("  Файлы .py не найдены (или все отфильтрованы как тестовые)."))
-        sys.exit(0)
+        return
 
     root_modules = {f.stem for f in root.iterdir() if f.is_dir() or f.suffix == ".py"}
     print(f"  {dim('Найдено .py файлов:')} {g(str(len(files)))}  {dim('(тест-файлы исключены)')}")
@@ -427,10 +505,9 @@ def main():
 
     tree_nodes = build_tree(files, root)
     flows = detect_flows(all_funcs)
-    active = SECTIONS if args.section == "all" else [args.section]
 
     captured = {}
-    for sec in active:
+    for sec in active_sections:
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             if sec == "overview":    print_overview(stats_per_file, files, all_classes)
@@ -446,10 +523,35 @@ def main():
 
     print(f"\n{SEP}\n")
 
-    if args.out:
-        export_report(args.out, captured)
-        print()
+    if out_file:
+        folder_out = out_file.replace(".txt", f"_{root.name}.txt")
+        export_report(folder_out, captured)
 
+
+def main():
+    # Если путь передан аргументом — старый режим (для опытных)
+    if len(sys.argv) > 1:
+        parser = argparse.ArgumentParser(description="PyScope - анализатор Python-проектов")
+        parser.add_argument("path", help="Путь к папке проекта")
+        parser.add_argument("--section", "-s", choices=SECTIONS + ["all"], default="all")
+        parser.add_argument("--out", "-o", help="Сохранить отчёт в файл .txt")
+        args = parser.parse_args()
+        root = Path(args.path).resolve()
+        if not root.exists() or not root.is_dir():
+            print(r("Ошибка: папка не найдена - " + str(root)))
+            sys.exit(1)
+        active = SECTIONS if args.section == "all" else [args.section]
+        analyze_folder(root, active, args.out)
+        input("  Нажмите Enter для выхода...")
+        return
+
+    # Интерактивная форма
+    folders, active_sections, out_file = interactive_form()
+
+    for folder in folders:
+        analyze_folder(folder, active_sections, out_file)
+
+    print(f"\n  {g('Анализ завершён.')} Обработано папок: {g(str(len(folders)))}")
     input("  Нажмите Enter для выхода...")
 
 
